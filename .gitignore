@@ -1,0 +1,27 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+# 敏感/构建产物
+/keystore/
+/app/build
+/.kotlin/
+*.apk
+*.aab
+*.jks
+*.keystore
+/.backup/
+/.operit/
+/tools/
+/app/release/
