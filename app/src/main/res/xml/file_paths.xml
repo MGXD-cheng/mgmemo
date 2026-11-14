@@ -2,4 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="exports" path="exports/" />
     <cache-path name="images" path="images/" />
+    <!-- Android 9 及以下写公共下载目录时用于分享 -->
+    <external-path name="downloads" path="Download/MGMemo/" />
 </paths>

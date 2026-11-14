@@ -12,8 +12,8 @@ android {
         applicationId = "com.mgmemo.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 13
+        versionName = "2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -36,6 +36,12 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    testOptions {
+        unitTests {
+            // 让 android.util.Base64 等桩方法返回默认值，便于纯 JVM 测试解析逻辑
+            isReturnDefaultValues = true
+        }
     }
     packaging {
         resources {

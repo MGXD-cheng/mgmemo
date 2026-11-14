@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,9 +53,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,12 +87,13 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.mgmemo.app.ui.components.HistoryDialog
 import com.mgmemo.app.ui.components.MarkdownWebView
+import com.mgmemo.app.data.HtmlRenderer
 import com.mgmemo.app.viewmodel.NotesViewModel
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NoteEditorScreen(
     viewModel: NotesViewModel,
@@ -103,6 +108,16 @@ fun NoteEditorScreen(
     val history by viewModel.history.collectAsState()
     val isSummarizing by viewModel.isSummarizing.collectAsState()
     val summaryResult by viewModel.summaryResult.collectAsState()
+    val summaryFromCache by viewModel.summaryFromCache.collectAsState()
+    val isTitling by viewModel.isTitling.collectAsState()
+    val currentTags by viewModel.currentTags.collectAsState()
+    // 已有标签（笔记用过的 + 手动创建）+ 使用次数，供标签弹窗快速点选
+    val allTags by viewModel.allTags.collectAsState()
+    val tagCounts by viewModel.tagCounts.collectAsState()
+    val isSuggestingTags by viewModel.isSuggestingTags.collectAsState()
+    val suggestedTags by viewModel.suggestedTags.collectAsState()
+    val toastMessage by viewModel.toastMessage.collectAsState()
+    val titleSuggestion by viewModel.titleSuggestion.collectAsState()
     val currentNoteId by viewModel.currentNoteId.collectAsState()
 
     // ---------- 编辑页布局 ----------
@@ -116,10 +131,40 @@ fun NoteEditorScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // 预览 HTML 在 Kotlin 端渲染（不联网、无 CDN 依赖，打开即显示）
+    val previewHtml = remember(content) { HtmlRenderer.renderBody(content) }
+
     var showHistory by remember { mutableStateOf(false) }
     var showExportMenu by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSummary by remember { mutableStateOf(false) }
+    var showTagDialog by remember { mutableStateOf(false) }
+    var showTitleDialog by remember { mutableStateOf(false) }
+    var tagInput by remember { mutableStateOf("") }
+    var titleInput by remember { mutableStateOf("") }
+
+    // 同步标签 / 标题输入框（标题仅在弹窗打开时初始化，避免输入被覆盖）
+    LaunchedEffect(currentTags, showTagDialog) {
+        if (showTagDialog) tagInput = currentTags
+    }
+    LaunchedEffect(showTitleDialog) {
+        if (showTitleDialog) titleInput = title
+    }
+    // AI 标题建议到达 → 填入输入框（弹窗保持打开）
+    LaunchedEffect(titleSuggestion) {
+        titleSuggestion?.let {
+            titleInput = it
+            viewModel.clearTitleSuggestion()
+        }
+    }
+
+    // 全局 Toast 提示
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.consumeToast()
+        }
+    }
 
     // ---------- 滚动同步状态 ----------
     val textScroll = rememberScrollState()
@@ -272,34 +317,68 @@ fun NoteEditorScreen(
     fun doExportMarkdown() {
         val id = currentNoteId ?: return
         scope.launch {
-            val uri = viewModel.exportMarkdown(id)
-            if (uri != null) shareUri(uri, "text/markdown")
-            else Toast.makeText(context, "导出失败", Toast.LENGTH_SHORT).show()
+            val outcome = viewModel.exportMarkdown(id)
+            if (outcome == null) {
+                Toast.makeText(context, "导出失败", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            Toast.makeText(
+                context,
+                "${outcome.locationLabel}：${outcome.fileName}",
+                Toast.LENGTH_LONG
+            ).show()
+            shareUri(outcome.uri, "text/markdown")
         }
     }
 
     fun doExportPdf() {
         val id = currentNoteId ?: return
         scope.launch {
-            val uri = viewModel.exportPdf(id)
-            if (uri != null) shareUri(uri, "application/pdf")
-            else Toast.makeText(context, "导出 PDF 失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "正在渲染 PDF…", Toast.LENGTH_SHORT).show()
+            val outcome = viewModel.exportPdf(id)
+            if (outcome == null) {
+                Toast.makeText(context, "导出 PDF 失败", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            Toast.makeText(
+                context,
+                "${outcome.locationLabel}：${outcome.fileName}",
+                Toast.LENGTH_LONG
+            ).show()
+            shareUri(outcome.uri, "application/pdf")
         }
     }
 
     fun doExportWord() {
         val id = currentNoteId ?: return
         scope.launch {
-            val uri = viewModel.exportWord(id)
-            if (uri != null) shareUri(uri, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            else Toast.makeText(context, "导出 Word 失败", Toast.LENGTH_SHORT).show()
+            val outcome = viewModel.exportWord(id)
+            if (outcome == null) {
+                Toast.makeText(context, "导出 Word 失败", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            Toast.makeText(
+                context,
+                "${outcome.locationLabel}：${outcome.fileName}",
+                Toast.LENGTH_LONG
+            ).show()
+            shareUri(
+                outcome.uri,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
         }
     }
 
     fun doShareText() {
+        // 分享纯文本：剥离 Markdown / HTML 标记，输出可直接阅读的文本
+        val plain = viewModel.plainTextForShare()
+        if (plain.isBlank()) {
+            Toast.makeText(context, "内容为空", Toast.LENGTH_SHORT).show()
+            return
+        }
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, content)
+            putExtra(Intent.EXTRA_TEXT, plain)
         }
         context.startActivity(Intent.createChooser(send, "分享纯文本"))
     }
@@ -317,11 +396,30 @@ fun NoteEditorScreen(
                         }
                     },
                     title = {
-                        Text(
-                            text = title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        // 点击标题可手动编辑
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { showTitleDialog = true }
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (currentTags.isNotBlank()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "#" + currentTags.split(",").first().trim(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     },
                     actions = {
                         IconButton(onClick = { showHistory = true }) {
@@ -397,6 +495,8 @@ fun NoteEditorScreen(
                     canUndo = undoStack.isNotEmpty(),
                     canRedo = redoStack.isNotEmpty(),
                     isSummarizing = isSummarizing,
+                    isTitling = isTitling,
+                    hasTags = currentTags.isNotBlank(),
                     onUndo = viewModel::undo,
                     onRedo = viewModel::redo,
                     onImage = { imagePicker.launch("image/*") },
@@ -417,7 +517,9 @@ fun NoteEditorScreen(
                             startVoiceByIntent()
                         }
                     },
-                    onSummarize = viewModel::generateSummary
+                    onSummarize = { viewModel.generateSummary(force = false) },
+                    onAiTitle = viewModel::generateTitleWithAi,
+                    onTags = { showTagDialog = true }
                 )
 
                 // 保存状态
@@ -447,7 +549,7 @@ fun NoteEditorScreen(
                 // 仅渲染预览
                 Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                     MarkdownWebView(
-                        markdown = content,
+                        html = previewHtml,
                         themeMode = settings.themeMode,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -457,12 +559,26 @@ fun NoteEditorScreen(
                 // 所见即所得编辑：渲染后可直接修改
                 Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                     MarkdownWebView(
-                        markdown = content,
+                        html = previewHtml,
                         themeMode = settings.themeMode,
                         editable = true,
                         onContentChanged = { md -> viewModel.onEditorContentChange(md) },
                         modifier = Modifier.fillMaxSize()
                     )
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f)
+                    ) {
+                        Text(
+                            text = "可直接编辑渲染内容，改动自动同步回原文",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
             else -> {
@@ -509,7 +625,7 @@ fun NoteEditorScreen(
                     .fillMaxHeight()
             ) {
                 MarkdownWebView(
-                    markdown = content,
+                    html = previewHtml,
                     themeMode = settings.themeMode,
                     modifier = Modifier.fillMaxSize(),
                     onScrollRatioChanged = { ratio ->
@@ -562,15 +678,41 @@ fun NoteEditorScreen(
         )
     }
 
-    // ---------- AI 摘要结果 ----------
+    // ---------- AI 摘要结果（本地已保存则直接展示） ----------
     if (summaryResult != null) {
         AlertDialog(
             onDismissRequest = {
                 showSummary = false
                 viewModel.clearSummary()
             },
-            title = { Text("AI 智能摘要") },
-            text = { Text(summaryResult ?: "") },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("AI 智能摘要")
+                    if (summaryFromCache) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "已保存",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            text = {
+                Column {
+                    Text(summaryResult ?: "")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (summaryFromCache) {
+                            "这份摘要已与笔记关联保存，再次点击会直接显示。"
+                        } else {
+                            "摘要已保存到这篇笔记。"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -578,10 +720,202 @@ fun NoteEditorScreen(
                         viewModel.clearSummary()
                     }
                 ) { Text("关闭") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isSummarizing,
+                    onClick = { viewModel.generateSummary(force = true) }
+                ) {
+                    Text(if (isSummarizing) "生成中…" else "重新生成")
+                }
+            }
+        )
+    }
+
+    // ---------- 标题编辑（AI 起标题不会关闭弹窗） ----------
+    if (showTitleDialog) {
+        AlertDialog(
+            onDismissRequest = { showTitleDialog = false },
+            title = { Text("编辑标题") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = titleInput,
+                        onValueChange = { titleInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("笔记标题") },
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isTitling) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("AI 正在拟标题…", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            TextButton(onClick = viewModel::suggestTitleWithAi) {
+                                Text("让 AI 帮我起标题")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.setTitle(titleInput)
+                        showTitleDialog = false
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTitleDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // ---------- 标签管理 ----------
+    if (showTagDialog) {
+        AlertDialog(
+            onDismissRequest = { showTagDialog = false },
+            title = { Text("标签") },
+            text = {
+                // 点击 Chip 即在输入框里增删这个标签
+                fun toggleTag(tag: String) {
+                    val current = normalizeTags(tagInput)
+                        .split(",")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .toMutableList()
+                    if (current.contains(tag)) current.remove(tag) else current.add(tag)
+                    tagInput = current.joinToString(",")
+                }
+
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 430.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    OutlinedTextField(
+                        value = tagInput,
+                        onValueChange = { tagInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("多个标签用逗号分隔") },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (tagInput.isNotBlank()) {
+                                IconButton(onClick = { tagInput = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "清空"
+                                    )
+                                }
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isSuggestingTags) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("AI 正在分析全部笔记…", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            TextButton(onClick = viewModel::suggestTagsWithAi) {
+                                Text("AI 推荐标签")
+                            }
+                        }
+                    }
+                    if (suggestedTags.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "点击选用（结合全部笔记类型生成）：",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            suggestedTags.forEach { tag ->
+                                FilterChip(
+                                    selected = normalizeTags(tagInput).split(",").contains(tag),
+                                    onClick = { toggleTag(tag) },
+                                    label = { Text(tag) }
+                                )
+                            }
+                        }
+                    }
+
+                    // ---------- 已有标签：点一下就能加上 ----------
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = if (allTags.isEmpty()) {
+                            "还没有已有标签，先在上面输入几个吧"
+                        } else {
+                            "已有标签（点击添加，再点取消）"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (allTags.isNotEmpty()) {
+                        val picked = normalizeTags(tagInput)
+                            .split(",")
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            allTags
+                                .sortedWith(
+                                    compareByDescending<String> { tagCounts[it] ?: 0 }
+                                        .thenBy { it }
+                                )
+                                .forEach { tag ->
+                                    val used = tagCounts[tag] ?: 0
+                                    FilterChip(
+                                        selected = picked.contains(tag),
+                                        onClick = { toggleTag(tag) },
+                                        label = {
+                                            Text(if (used > 0) "$tag ($used)" else tag)
+                                        }
+                                    )
+                                }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateTags(normalizeTags(tagInput))
+                        showTagDialog = false
+                        viewModel.clearSuggestedTags()
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTagDialog = false }) { Text("取消") }
             }
         )
     }
 }
+
+/** 规范化标签输入：中英文逗号 / 顿号 / 空格分隔 → 英文逗号 */
+private fun normalizeTags(raw: String): String =
+    raw.split(",", "，", "、", " ", "\n")
+        .map { it.trim().trimStart('#') }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .joinToString(",")
 
 @Composable
 private fun EditorToolbar(
@@ -591,12 +925,16 @@ private fun EditorToolbar(
     canUndo: Boolean,
     canRedo: Boolean,
     isSummarizing: Boolean,
+    isTitling: Boolean,
+    hasTags: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onImage: () -> Unit,
     onCamera: () -> Unit,
     onVoice: () -> Unit,
-    onSummarize: () -> Unit
+    onSummarize: () -> Unit,
+    onAiTitle: () -> Unit,
+    onTags: () -> Unit
 ) {
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -635,6 +973,25 @@ private fun EditorToolbar(
             } else {
                 ToolbarButton("AI摘要", onClick = onSummarize)
             }
+            if (isTitling) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(16.dp).height(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("起标题…", style = MaterialTheme.typography.labelLarge)
+                }
+            } else {
+                ToolbarButton("AI标题", onClick = onAiTitle)
+            }
+            ToolbarButton(
+                text = if (hasTags) "标签 ✓" else "标签",
+                onClick = onTags
+            )
         }
     }
 }
@@ -676,7 +1033,11 @@ private fun EditorTextPane(
                 value = "",
                 onValueChange = onContentChange,
                 modifier = Modifier.fillMaxWidth(),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp),
+                // BasicTextField 不会继承主题文字颜色，必须显式指定，否则深色模式下是黑字黑底
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    lineHeight = 26.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     Box {
@@ -698,7 +1059,11 @@ private fun EditorTextPane(
                         onBlockTextChange(blocks, index, newText, onContentChange)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp),
+                    // 同样显式指定颜色：深色模式下保证文字可见
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        lineHeight = 26.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
                 )
                 is EditorBlock.ImageBlock -> ImageThumbnail(

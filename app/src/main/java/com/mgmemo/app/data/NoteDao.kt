@@ -36,4 +36,24 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes ORDER BY updatedAt DESC LIMIT :limit")
     suspend fun getRecent(limit: Int): List<Note>
+
+    /** AI 分类 / 标签建议需要一次性读取全部笔记 */
+    @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
+    suspend fun getAll(): List<Note>
+
+    /** 仅更新摘要（AI 摘要持久化） */
+    @Query("UPDATE notes SET summary = :summary, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateSummary(id: Long, summary: String, updatedAt: Long)
+
+    /** 仅更新标签 */
+    @Query("UPDATE notes SET tags = :tags, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateTags(id: Long, tags: String, updatedAt: Long)
+
+    /** 仅更新标题（AI 起标题 / 手动改标题） */
+    @Query("UPDATE notes SET title = :title, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateTitle(id: Long, title: String, updatedAt: Long)
+
+    /** 清空全部笔记（覆盖导入时使用） */
+    @Query("DELETE FROM notes")
+    suspend fun deleteAll()
 }

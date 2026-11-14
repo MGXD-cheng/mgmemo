@@ -1,30 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MGMemo 图标前景：一张 Markdown 便签（白色纸 + 绿色 M↓ 标记） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+
+    <!-- 纸张主体（含右上折角） -->
     <path
         android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+        android:pathData="M37,26 L63,26 L75,38 L75,78 A5,5 0 0 1 70,83 L37,83 A5,5 0 0 1 32,78 L32,31 A5,5 0 0 1 37,26 Z" />
+
+    <!-- 折角三角（浅绿，表现纸张翻折） -->
+    <path
+        android:fillColor="#C7E6C9"
+        android:pathData="M63,26 L75,38 L63,38 Z" />
+
+    <!-- M 标记 -->
+    <path
+        android:pathData="M40,62 L40,46 L47,54 L54,46 L54,62"
+        android:strokeColor="#2E6B3A"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 向下箭头（Markdown 的 ↓） -->
+    <path
+        android:pathData="M63,46 L63,59"
+        android:strokeColor="#2E6B3A"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M58.5,54.5 L63,59 L67.5,54.5"
+        android:strokeColor="#2E6B3A"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 底部两条文本占位线 -->
+    <path
+        android:fillColor="#C7E6C9"
+        android:pathData="M40,69 L66,69 L66,71.5 L40,71.5 Z" />
+    <path
+        android:fillColor="#DCEDDD"
+        android:pathData="M40,75 L57,75 L57,77.5 L40,77.5 Z" />
 </vector>

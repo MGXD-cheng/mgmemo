@@ -10,21 +10,26 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,8 +40,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.mgmemo.app.viewmodel.NotesViewModel
 
 private data class ThemeEntry(val label: String, val mode: String)
@@ -55,6 +63,16 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsState()
+    val isBackingUp by viewModel.isBackingUp.collectAsState()
+    val backupMessage by viewModel.backupMessage.collectAsState()
+    val lastBackupUri by viewModel.lastBackupUri.collectAsState()
+    val pendingImport by viewModel.pendingImport.collectAsState()
+    val context = LocalContext.current
+
+    // 系统文件选择器（读取 .json 备份）
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { viewModel.prepareImport(it) } }
 
     var aiUrl by remember { mutableStateOf(settings.aiApiUrl) }
     var aiKey by remember { mutableStateOf(settings.aiApiKey) }
@@ -212,6 +230,27 @@ fun SettingsScreen(
                 )
             }
             item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("AI 分类只用现有标签", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "开启后，AI 分类与推荐标签只会从已有标签里选择，不会凭空造新标签",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.aiTagStrict,
+                        onCheckedChange = viewModel::updateAiTagStrict
+                    )
+                }
+            }
+            item {
                 Button(
                     onClick = { viewModel.updateAiConfig(aiUrl, aiKey, aiModel) },
                     modifier = Modifier
@@ -222,10 +261,83 @@ fun SettingsScreen(
                 }
             }
 
+            item { HorizontalDivider() }
+
+            item {
+                Text(
+                    text = "备份与恢复",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            item {
+                Text(
+                    text = "导出的 JSON 包含全部笔记、标签、AI 摘要与历史版本；" +
+                        "不含 API Key，可自行保存或同步到网盘。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.exportBackup() },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isBackingUp
+                    ) {
+                        Text("导出备份")
+                    }
+                    OutlinedButton(
+                        onClick = { importLauncher.launch(arrayOf("*/*")) },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isBackingUp
+                    ) {
+                        Text("导入备份")
+                    }
+                }
+            }
+            if (isBackingUp) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "正在处理备份…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            if (lastBackupUri != null) {
+                item {
+                    TextButton(
+                        onClick = {
+                            val uri = lastBackupUri ?: return@TextButton
+                            val send = android.content.Intent(
+                                android.content.Intent.ACTION_SEND
+                            ).apply {
+                                type = "application/json"
+                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(
+                                android.content.Intent.createChooser(send, "分享备份文件")
+                            )
+                        }
+                    ) {
+                        Text("分享刚导出的备份文件")
+                    }
+                }
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "MGMemo v1.0 · 全能型原生备忘录",
+                    text = "MGMemo v1.8 · 极简 Markdown 备忘录",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
@@ -233,6 +345,45 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+// ---------- 导入确认 ----------
+    pendingImport?.let { data ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissPendingImport() },
+            title = { Text("导入备份") },
+            text = {
+                Text(
+                    "备份里共有 ${data.notes.size} 篇笔记。\n\n" +
+                        "合并导入：保留现有笔记，追加备份内容\n" +
+                        "覆盖导入：先清空现有笔记再导入（不可恢复）",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmImport(false) }) {
+                    Text("合并导入")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.confirmImport(true) }) {
+                    Text("覆盖导入", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        )
+    }
+
+    // ---------- 备份/恢复结果 ----------
+    backupMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearBackupMessage() },
+            title = { Text("备份与恢复") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearBackupMessage() }) {
+                    Text("知道了")
+                }
+            }
+        )
     }
 }
 

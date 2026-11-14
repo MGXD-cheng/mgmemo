@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 单色图标（Android 13+ 主题图标）：只依赖 alpha，系统会自动着色 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 纸张外轮廓（镂空显示内部标记） -->
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M37,26 L63,26 L75,38 L75,78 A5,5 0 0 1 70,83 L37,83 A5,5 0 0 1 32,78 L32,31 A5,5 0 0 1 37,26 Z M40,46 L40,62 L44,62 L44,52.5 L47,55.5 L50,52.5 L50,62 L54,62 L54,46 L47,53 Z M63,46 L63,59 L58.5,54.5 L55.5,57.5 L63,65 L70.5,57.5 L67.5,54.5 Z" />
+</vector>

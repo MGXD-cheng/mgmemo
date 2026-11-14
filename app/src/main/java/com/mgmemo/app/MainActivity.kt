@@ -43,6 +43,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.mgmemo.app.ui.screens.NoteEditorScreen
 import com.mgmemo.app.ui.screens.NoteListScreen
 import com.mgmemo.app.ui.screens.SettingsScreen
+import com.mgmemo.app.ui.screens.TagManagerScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -176,6 +177,7 @@ private fun MGMemoAppContent(
     onUnlock: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showTagManager by remember { mutableStateOf(false) }
     val currentNoteId by viewModel.currentNoteId.collectAsState()
 
     // 打开笔记/新建笔记 → 自动进入编辑页；关闭编辑页 → 自动回列表
@@ -195,6 +197,10 @@ private fun MGMemoAppContent(
                 viewModel = viewModel,
                 onBack = { showSettings = false }
             )
+            showTagManager -> TagManagerScreen(
+                viewModel = viewModel,
+                onBack = { showTagManager = false }
+            )
             currentNoteId != null -> NoteEditorScreen(
                 viewModel = viewModel,
                 onBack = { viewModel.closeEditor() }
@@ -203,6 +209,7 @@ private fun MGMemoAppContent(
                 viewModel = viewModel,
                 onOpenNote = { viewModel.openNote(it) },
                 onOpenSettings = { showSettings = true },
+                onOpenTags = { showTagManager = true },
                 onNewNote = { viewModel.createNote() }
             )
         }
